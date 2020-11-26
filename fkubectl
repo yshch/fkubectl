@@ -306,14 +306,16 @@ _k_port_forward() {
 }
 
 _k_configmap() {
-    sel_cm=$(kubectl get configmaps --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $2}')
+    sel_cm=$(kubectl get configmaps --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2}')
 
     if [ -z "$sel_cm" ] ; then
         _print 'no configmap selected, exiting'
         exit 1
     fi
 
-    kubectl get configmap -n "${sel_cm%%|*}" "${sel_cm##*|}" -o json | jq -r '.data | to_entries[] | "\(.key): \(.value)"'
+    for cur_cm in $sel_cm ; do
+        kubectl get configmap -n "${cur_cm%%|*}" "${cur_cm##*|}" -o json | jq -r '.data | to_entries[] | "\(.key): \(.value)"'
+    done
 }
 
 _k_sec() {

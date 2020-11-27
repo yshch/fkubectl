@@ -433,6 +433,7 @@ _k_root() {
 
 _k_watch() {
     resource="$1"
+    shift
 
     if [ -z "$resource" ] ; then
         _print "no resources selected, exiting"

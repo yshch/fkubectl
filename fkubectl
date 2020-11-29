@@ -366,7 +366,12 @@ _k_run() {
         "spec": {
             "nodeSelector": {
                 "kubernetes.io/hostname": "'$sel_node'"
-            }
+            },
+            "tolerations": [
+                {
+                    "operator": "Exists"
+                }
+            ]
         }
     }
     '

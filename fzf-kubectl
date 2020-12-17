@@ -60,7 +60,8 @@ edit                ed          e
 delete              del           
 restart                           
 logs                log         l 
-copy                cp            
+fetch                             
+put                               
 configmap           cm            
 secret              sec         s 
 exec                e             
@@ -265,7 +266,7 @@ _k_logs() {
     done
 }
 
-_k_copy() {
+_k_fetch() {
     sel_pod=$(kubectl get pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1, $2 }')
 
     if [ -z "$sel_pod" ] ; then
@@ -279,7 +280,24 @@ _k_copy() {
         exit 1
     fi
 
-    kubectl -n "${sel_pod%% *}" cp "${sel_pod##* }":"$@" -c "${sel_cont}"
+    kubectl -n "${sel_pod%% *}" cp "${sel_pod##* }":"$1" "$2" -c "${sel_cont}"
+}
+
+_k_put() {
+    sel_pod=$(kubectl get pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1, $2 }')
+
+    if [ -z "$sel_pod" ] ; then
+        _print "no pod selected, exiting"
+        exit 1
+    fi
+
+    sel_cont=$(kubectl get pods -n "${sel_pod%% *}" "${sel_pod##* }" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} --no-multi --header-lines=0)
+    if [ -z "$sel_cont" ] ; then
+        _print "no container selected, exiting"
+        exit 1
+    fi
+
+    kubectl -n "${sel_pod%% *}" cp "$1" "${sel_pod##* }":"$2" -c "${sel_cont}"
 }
 
 _k_exec() {
@@ -587,8 +605,11 @@ case "$action" in
     "logs" | "log" | "l")
         _k_logs "$@"
     ;;
-    "copy" | "cp")
-        _k_copy "$@"
+    "fetch")
+        _k_fetch "$@"
+    ;;
+    "put")
+        _k_put "$@"
     ;;
     "exec" | "ex")
         _k_exec "$@"

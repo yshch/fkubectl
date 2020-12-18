@@ -53,25 +53,29 @@ sc
 volumeattachments
 loggings"
 
-ACTION_LIST="\
-get                 g             
-describe            d             
-edit                ed          e 
-delete              del           
-restart                           
-logs                log         l 
-fetch                             
-put                               
-configmap           cm            
-secret              sec         s 
-exec                e             
-root                rt            
-watch               w             
-watch-namespace     watchns     wn
-events              ev            
-top-pods            tp            
-top-nodes           tn            
-context             ctx           "
+usage() {
+    printf 'Usage: fzf-kubectl <command> [options]                      \n'
+    printf '                                                            \n'
+    printf 'commands:                                                   \n'
+    printf '    g,  get         Display resources                       \n'
+    printf '    d,  describe    Describe resources                      \n'
+    printf '    e,  edit        Edit resources                          \n'
+    printf '    del,delete      Delete resources                        \n'
+    printf '        restart     Restart deployment/statefulset          \n'
+    printf '    l,  logs        Print container logs                    \n'
+    printf '        fetch       Copy file from container                \n'
+    printf '        put         Copy file to container                  \n'
+    printf '    cm, configmap   Display configmap data                  \n'
+    printf '    sec,secret      Decode from b64 and display secret data \n'
+    printf '    e,  exec        Execute command in container            \n'
+    printf '    rt, root        Run priviliged container                \n'
+    printf '    w,  watch       Watch specific resource                 \n'
+    printf '    wn, watchns     Watch all resources in namespace        \n'
+    printf '    ev, events      Display kubernetes events               \n'
+    printf '    tp, top-pods    Display pod resource usage              \n'
+    printf '    tn, top-nodes   Display node resource usage             \n'
+    printf '    ctx,context     Switch context                          \n'
+}
 
 _print() {
     printf '%s\n' "$@"
@@ -91,10 +95,6 @@ _k_is_namespaced() {
     else
         return 0
     fi
-}
-
-_k_get_actions() {
-    printf '%s' "$ACTION_LIST" | ${FZF_CMD} --no-multi --header-lines=0 | awk '{ print $1 }'
 }
 
 _k_get_api_resources() {
@@ -559,11 +559,12 @@ if [ "$1" = "--verbose" ] || [ "$1" = "-v" ] ; then
 fi
 
 if [ "$#" -eq 0 ] ; then
-    action=$(_k_get_actions)
-else
-    action="$1"
-    shift
+    usage
+    exit 0
 fi
+
+action=$1
+shift
 
 case "$action" in
     "get" | "g")
@@ -578,7 +579,7 @@ case "$action" in
         fi
         _k_describe "$@"
     ;;
-    "edit" | "ed" | "e")
+    "edit" | "e")
         if [ "$#" -eq 0 ] ; then
             set -- "$(_k_get_api_resources)"
         fi
@@ -602,7 +603,7 @@ case "$action" in
         fi
         _k_restart "$@"
     ;;
-    "logs" | "log" | "l")
+    "logs" | "l")
         _k_logs "$@"
     ;;
     "fetch")
@@ -620,7 +621,7 @@ case "$action" in
     "configmap" | "cm")
         _k_configmap
     ;;
-    "secret" | "sec" | "s")
+    "secret" | "sec")
         _k_sec
     ;;
     "watch" | "w")
@@ -629,7 +630,7 @@ case "$action" in
         fi
         _k_watch "$@"
     ;;
-    "watch-namespace" | "watchns" | "wn")
+    "watchns" | "wn")
         _k_watch_ns "$@"
     ;;
     "events" | "ev")
@@ -646,6 +647,7 @@ case "$action" in
     ;;
     *)
         _print 'unknown action, exiting'
+        usage
         exit 1
     ;;
 esac

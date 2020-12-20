@@ -54,27 +54,30 @@ volumeattachments
 loggings"
 
 usage() {
-    printf 'Usage: fzf-kubectl <command> [options]                      \n'
-    printf '                                                            \n'
-    printf 'commands:                                                   \n'
-    printf '    g,  get         Display resources                       \n'
-    printf '    d,  describe    Describe resources                      \n'
-    printf '    e,  edit        Edit resources                          \n'
-    printf '    del,delete      Delete resources                        \n'
-    printf '        restart     Restart deployment/statefulset          \n'
-    printf '    l,  logs        Print container logs                    \n'
-    printf '        fetch       Copy file from container                \n'
-    printf '        put         Copy file to container                  \n'
-    printf '    cm, configmap   Display configmap data                  \n'
-    printf '    sec,secret      Decode from b64 and display secret data \n'
-    printf '    e,  exec        Execute command in container            \n'
-    printf '    rt, root        Run priviliged container                \n'
-    printf '    w,  watch       Watch specific resource                 \n'
-    printf '    wn, watchns     Watch all resources in namespace        \n'
-    printf '    ev, events      Display kubernetes events               \n'
-    printf '    tp, top-pods    Display pod resource usage              \n'
-    printf '    tn, top-nodes   Display node resource usage             \n'
-    printf '    ctx,context     Switch context                          \n'
+    cat << EOF
+Usage: fzf-kubectl <command> [options]
+
+  Available commands:
+    g,  get         Display resources
+    d,  describe    Describe resources
+    e,  edit        Edit resources
+    del,delete      Delete resources
+        restart     Restart deployment/statefulset
+    l,  logs        Print container logs
+        fetch       Copy file from container
+        put         Copy file to container
+    cm, configmap   Display configmap data
+    sec,secret      Decode from b64 and display secret data
+    e,  exec        Execute command in container
+    rt, root        Run priviliged container
+    w,  watch       Watch specific resource
+    wn, watchns     Watch all resources in namespace
+    ev, events      Display kubernetes events
+    tp, top-pods    Display pod resource usage
+    tn, top-nodes   Display node resource usage
+    ctx,context     Switch context
+
+EOF
 }
 
 _print() {

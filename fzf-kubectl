@@ -3,12 +3,7 @@
 IFS=' 	
 '
 
-PATH='/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin'
-export PATH
-
-################################################################################
-
-FZF_CMD="fzf --multi -0 -1 --height=100% --header-lines=1 --reverse --inline-info"
+FZF_CMD="fzf --multi -0 --height=100% --reverse --inline-info --header-lines=1"
 
 #kubectl api-resources --namespaced=false | awk '(header_len){ print substr($0, 0, header_len) } (!header_len){ header_len=index($0, " APIGROUP") }'
 #kubectl api-resources --namespaced=false | awk '(name_len){ print substr($0, 0, name_len) } (shortnames_len){ print substr($0, name_len + 1, shortnames_len - name_len - 1) } (!name_len){ name_len=index($0, " SHORTNAMES") } (!shortnames_len){ shortnames_len=index($0, "APIGROUP") }'
@@ -63,7 +58,9 @@ Usage: fzf-kubectl <command> [options]
     e,  edit        Edit resources
     del,delete      Delete resources
         restart     Restart deployment/statefulset
+        scale       Scale deployment/statefulset
     l,  logs        Print container logs
+    al, app-logs    Print deployment/statefulset logs
         fetch       Copy file from container
         put         Copy file to container
     cm, configmap   Display configmap data
@@ -77,14 +74,26 @@ Usage: fzf-kubectl <command> [options]
     tn, top-nodes   Display node resource usage
     ctx,context     Switch context
 
+  Available options:
+    -s                  Simulate/dry-run
+    -v                  Verbose
+
 EOF
 }
 
-_print() {
-    printf '%s\n' "$@"
+__fzfkubectl_execute() {
+    cmd="$@"
+
+    if [ "$VERBOSE" = "true" ] ; then
+        printf "$*\n"
+    fi
+
+    if [ "$DRY_RUN" != "true" ] ; then
+        "$@"
+    fi
 }
 
-_k_is_namespaced() {
+__fzfkubectl_is_namespaced() {
     resource="$1"
 
     if printf '%s' "$CLUSTER_LEVEL_RESOURCES" | grep -q "^${resource}s\\{0,1\\}$" ; then
@@ -94,303 +103,354 @@ _k_is_namespaced() {
     fi
 }
 
-_k_get_api_resources() {
+__fzfkubectl_select() {
+    resource="$1"
+    if [ -z "$resource" ] ; then
+        exit 1
+    fi
+
+    kubectl get "$resource" | ${FZF_CMD} | awk '{ print $1 }'
+}
+
+__fzfkubectl_select_namespaced() {
+    resource="$1"
+    if [ -z "$resource" ] ; then
+        exit 1
+    fi
+
+    kubectl get "$resource" --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2 }'
+}
+
+__fzfkubectl_select_api_resource() {
     kubectl api-resources | ${FZF_CMD} --no-multi | awk '{ print $1 }'
 }
 
-_k_get() {
+_fzfkubectl_get() {
     resource="$1"
     shift
-
     if [ -z "$resource" ] ; then
-        _print 'no resources selected, exiting'
+        printf 'no resource selected, exiting\n'
         exit 1
     fi
 
-    if _k_is_namespaced "$resource" ; then
-        sel_resources=$(kubectl get "$resource" --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2 }')
+    if __fzfkubectl_is_namespaced "$resource" ; then
+        sel_resources=$(__fzfkubectl_select_namespaced "$resource")
         if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
 
         for cur_res in $sel_resources ; do
-            kubectl get "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" -o yaml "$@"
+            __fzfkubectl_execute kubectl get "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" -o yaml "$@"
         done
     else
-        sel_resources=$(kubectl get "$resource" | ${FZF_CMD} | awk '{ print $1 }')
+        sel_resources=$(__fzfkubectl_select "$resource")
         if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
 
         for cur_res in $sel_resources ; do
-            kubectl get "$resource" "${cur_res}" -o yaml "$@"
+            __fzfkubectl_execute kubectl get "$resource" "${cur_res}" -o yaml "$@"
         done
     fi
 }
 
-_k_describe() {
+_fzfkubectl_describe() {
     resource="$1"
     shift
-
     if [ -z "$resource" ] ; then
-        _print 'no resources selected, exiting'
+        printf 'no resource selected, exiting\n'
         exit 1
     fi
 
-    if _k_is_namespaced "$resource" ; then
-        sel_resources=$(kubectl get "$resource" --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2 }')
+    if __fzfkubectl_is_namespaced "$resource" ; then
+        sel_resources=$(__fzfkubectl_select_namespaced "$resource")
         if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
 
         for cur_res in $sel_resources ; do
-            kubectl describe "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
+            __fzfkubectl_execute kubectl describe "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
         done
     else
-        sel_resources=$(kubectl get "$resource" | ${FZF_CMD} | awk '{ print $1 }')
+        sel_resources=$(__fzfkubectl_select "$resource")
         if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
 
         for cur_res in $sel_resources ; do
-            kubectl describe "$resource" "${cur_res}" "$@"
+            __fzfkubectl_execute kubectl get "$resource" "${cur_res}" "$@"
         done
     fi
 }
 
-_k_edit() {
+_fzfkubectl_edit() {
     resource="$1"
-
+    shift
     if [ -z "$resource" ] ; then
-        _print 'no resources selected, exiting'
+        printf 'no resource selected, exiting\n'
         exit 1
     fi
 
-    if _k_is_namespaced "$resource" ; then
-        sel_resources=$(kubectl get "$resource" --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2 }')
+    if __fzfkubectl_is_namespaced "$resource" ; then
+        sel_resources=$(__fzfkubectl_select_namespaced "$resource")
         if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
 
         for cur_res in $sel_resources ; do
-            kubectl edit "$resource" -n "${cur_res%%|*}" "${cur_res##*|}"
+            __fzfkubectl_execute kubectl edit "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
         done
     else
-        sel_resources=$(kubectl get "$resource" | ${FZF_CMD} | awk '{ print $1 }')
+        sel_resources=$(__fzfkubectl_select "$resource")
         if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
 
         for cur_res in $sel_resources ; do
-            kubectl edit "$resource" "${cur_res}"
+            __fzfkubectl_execute kubectl edit "$resource" "${cur_res}" "$@"
         done
     fi
 }
 
-_k_restart() {
+_fzfkubectl_delete() {
     resource="$1"
-
+    shift
     if [ -z "$resource" ] ; then
-        _print 'no resources selected, exiting'
+        printf 'no resource selected, exiting\n'
         exit 1
     fi
 
-    sel_resources=$(kubectl get "$resource" --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2 }')
+    if __fzfkubectl_is_namespaced "$resource" ; then
+        sel_resources=$(__fzfkubectl_select_namespaced "$resource")
+        if [ -z "$sel_resources" ] ; then
+            printf 'no %s selected, exiting\n' "$resource"
+            exit 1
+        fi
+
+        for cur_res in $sel_resources ; do
+            __fzfkubectl_execute kubectl delete "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
+        done
+    else
+        sel_resources=$(__fzfkubectl_select "$resource")
+        if [ -z "$sel_resources" ] ; then
+            printf 'no %s selected, exiting\n' "$resource"
+            exit 1
+        fi
+
+        for cur_res in $sel_resources ; do
+            __fzfkubectl_execute kubectl delete "$resource" "${cur_res}" "$@"
+        done
+    fi
+}
+
+_fzfkubectl_restart() {
+    resource="$1"
+    shift
+    if [ -z "$resource" ] ; then
+        printf 'no resource selected, exiting\n'
+        exit 1
+    fi
+
+    sel_resources=$(__fzfkubectl_select_namespaced "$resource")
     if [ -z "$sel_resources" ] ; then
-        _print 'no resources selected, exiting'
+        printf 'no %s selected, exiting\n' "$resource"
         exit 1
     fi
 
     for cur_res in $sel_resources ; do
-        kubectl rollout restart "$resource" -n "${cur_res%%|*}" "${cur_res##*|}"
+        __fzfkubectl_execute kubectl rollout restart "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
     done
 }
 
-_k_delete() {
+_fzfkubectl_scale() {
     resource="$1"
     shift
-
     if [ -z "$resource" ] ; then
-        _print 'no resources selected, exiting'
+        printf 'no resource selected, exiting\n'
         exit 1
     fi
 
-    if _k_is_namespaced "$resource" ; then
-        sel_resources=$(kubectl get "$resource" --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2 }')
-        if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
-            exit 1
-        fi
-
-        for cur_res in $sel_resources ; do
-            kubectl delete "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
-        done
-    else
-        sel_resources=$(kubectl get "$resource" | ${FZF_CMD} | awk '{ print $1 }')
-        if [ -z "$sel_resources" ] ; then
-            _print 'no resources selected, exiting'
-            exit 1
-        fi
-
-        for cur_res in $sel_resources ; do
-            kubectl delete "$resource" "${cur_res}" "$@"
-        done
-    fi
-}
-
-_k_logs() {
-    cur_pod=$(kubectl get pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1, $2 }')
-
-    if [ -z "$cur_pod" ] ; then
-        _print 'no pod selected, exiting'
+    sel_resources=$(__fzfkubectl_select_namespaced "$resource")
+    if [ -z "$sel_resources" ] ; then
+        printf 'no %s selected, exiting\n' "$resource"
         exit 1
     fi
 
-    cur_cont=$(kubectl get pods -n "${cur_pod%% *}" "${cur_pod##* }" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} --header-lines=0)
-    if [ -z "$cur_cont" ] ; then
-        _print 'no container selected, exiting'
-        exit 1
-    fi
-
-    for cont in $cur_cont ; do
-        kubectl -n "${cur_pod%% *}" logs "${cur_pod##* }" -c "${cont}" "$@"
+    for cur_res in $sel_resources ; do
+        __fzfkubectl_execute kubectl scale "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
     done
 }
 
-_k_fetch() {
-    sel_pod=$(kubectl get pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1, $2 }')
-
+_fzfkubectl_logs() {
+    sel_pod=$(__fzfkubectl_select_namespaced pod)
     if [ -z "$sel_pod" ] ; then
-        _print 'no pod selected, exiting'
+        printf 'no pod selected, exiting\n'
         exit 1
     fi
 
-    sel_cont=$(kubectl get pods -n "${sel_pod%% *}" "${sel_pod##* }" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} --no-multi --header-lines=0)
+    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --header-lines=0)
     if [ -z "$sel_cont" ] ; then
-        _print 'no container selected, exiting'
-        exit 1
-    fi
-
-    kubectl -n "${sel_pod%% *}" cp "${sel_pod##* }":"$1" "$2" -c "${sel_cont}"
-}
-
-_k_put() {
-    sel_pod=$(kubectl get pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1, $2 }')
-
-    if [ -z "$sel_pod" ] ; then
-        _print 'no pod selected, exiting'
-        exit 1
-    fi
-
-    sel_cont=$(kubectl get pods -n "${sel_pod%% *}" "${sel_pod##* }" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} --no-multi --header-lines=0)
-    if [ -z "$sel_cont" ] ; then
-        _print 'no container selected, exiting'
-        exit 1
-    fi
-
-    kubectl -n "${sel_pod%% *}" cp "$1" "${sel_pod##* }":"$2" -c "${sel_cont}"
-}
-
-_k_exec() {
-    if [ -z "$1" ] ; then
-        _print 'no command to execute, exiting'
-        exit 3
-    fi
-
-    sel_pod=$(kubectl get pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $2 }')
-    if [ -z "$sel_pod" ] ; then
-        _print 'no pod selected, exiting'
-        exit 1
-    fi
-
-    sel_cont=$(kubectl get pods -o=jsonpath='{.spec.containers[*].name}' -n "${sel_pod%%|*}" "${sel_pod##*|}" | tr -s '[:space:]' '\n' | ${FZF_CMD} --header-lines=0)
-    if [ -z "$sel_cont" ] ; then
-        _print 'no container selected, exiting'
+        printf 'no container selected, exiting\n'
         exit 1
     fi
 
     for cur_cont in $sel_cont ; do
-        kubectl -n "${sel_pod%%|*}" exec -it "${sel_pod##*|}" -c "$cur_cont" -- "$@"
+        __fzfkubectl_execute kubectl logs -n "${sel_pod%%|*}" "${sel_pod##*|}" -c "${cur_cont}" "$@"
     done
 }
 
-_k_port_forward() {
-    port="$1"
-    shift
-
-    if [ -z "$port" ] ; then
-        _print 'no port selected, exiting'
+_fzfkubectl_app_logs() {
+    sel_app=$(kubectl get daemonset,deployment,statefulset --all-namespaces --no-headers | ${FZF_CMD} --header-lines=0 | awk '{ print $1 "|" $2 }')
+    if [ -z "$sel_app" ] ; then
+        printf 'no app selected, exiting\n'
         exit 1
     fi
 
-    sel_pod=$(kubectl get pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $2 }')
-    if [ -z "$sel_pod" ] ; then
-        _print 'no pod selected, exiting'
-        exit 1
-    fi
+    sel_labels=$(kubectl get -n "${sel_app%%|*}" "${sel_app##*|}" -o jsonpath='{ .spec.template.metadata.labels }' | jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")')
 
-    kubectl port-forward -n "${sel_pod%%|*}" "${sel_pod##*|}" "$port" "$@"
+    #kubectl -n "${sel_app%% *}" logs --all-containers -l ${sel_labels} "$@" | jq -R -r '. as $line | try fromjson catch $line'
+    __fzfkubectl_execute kubectl logs -n "${sel_app%%|*}" --all-containers -l ${sel_labels} "$@"
 }
 
-_k_configmap() {
-    sel_cm=$(kubectl get configmaps --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2}')
+_fzfkubectl_fetch() {
+    if [ -z "$1" ] || [ -z "$2" ] ; then
+        printf 'no filename provided, exiting\n'
+        exit 1
+    fi
 
+    sel_pod=$(__fzfkubectl_select_namespaced pod)
+    if [ -z "$sel_pod" ] ; then
+        printf 'no pod selected, exiting\n'
+        exit 1
+    fi
+
+    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --no-multi --header-lines=0)
+    if [ -z "$sel_cont" ] ; then
+        printf 'no container selected, exiting\n'
+        exit 1
+    fi
+
+    __fzfkubectl_execute kubectl -n "${sel_pod%%|*}" cp "${sel_pod##*|}":"$1" "$2" -c "${sel_cont}"
+}
+
+_fzfkubectl_put() {
+    if [ -z "$1" ] || [ -z "$2" ] ; then
+        printf 'no filename provided, exiting\n'
+        exit 1
+    fi
+
+    sel_pod=$(__fzfkubectl_select_namespaced pod)
+    if [ -z "$sel_pod" ] ; then
+        printf 'no pod selected, exiting\n'
+        exit 1
+    fi
+
+    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --no-multi --header-lines=0)
+    if [ -z "$sel_cont" ] ; then
+        printf 'no container selected, exiting\n'
+        exit 1
+    fi
+
+    __fzfkubectl_execute kubectl -n "${sel_pod%%|*}" cp "$1" "${sel_pod##*|}":"$2" -c "${sel_cont}"
+}
+
+_fzfkubectl_exec() {
+    if [ -z "$@" ] ; then
+        printf 'no command to execute, exiting\n'
+        exit 1
+    fi
+
+    sel_pod=$(__fzfkubectl_select_namespaced pod)
+    if [ -z "$sel_pod" ] ; then
+        printf 'no pod selected, exiting\n'
+        exit 1
+    fi
+
+    sel_cont=$(kubectl get pods -o=jsonpath='{.spec.containers[*].name}' -n "${sel_pod%%|*}" "${sel_pod##*|}" | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --header-lines=0)
+    if [ -z "$sel_cont" ] ; then
+        printf 'no container selected, exiting\n'
+        exit 1
+    fi
+
+    for cur_cont in $sel_cont ; do
+        __fzfkubectl_execute kubectl exec -n "${sel_pod%%|*}" -it "${sel_pod##*|}" -c "$cur_cont" -- "$@"
+    done
+}
+
+_fzfkubectl_port_forward() {
+    port="$1"
+    shift
+    if [ -z "$port" ] ; then
+        printf 'no port selected, exiting\n'
+        exit 1
+    fi
+
+    sel_pod=$(__fzfkubectl_select_namespaced pod)
+    if [ -z "$sel_pod" ] ; then
+        printf 'no pod selected, exiting\n'
+        exit 1
+    fi
+
+    __fzfkubectl_execute kubectl port-forward -n "${sel_pod%%|*}" "${sel_pod##*|}" "$port" "$@"
+}
+
+_fzfkubectl_configmap() {
+    sel_cm=$(__fzfkubectl_select_namespaced configmap)
     if [ -z "$sel_cm" ] ; then
-        _print 'no configmap selected, exiting'
+        printf 'no configmap selected, exiting\n'
         exit 1
     fi
 
     for cur_cm in $sel_cm ; do
-        kubectl get configmap -n "${cur_cm%%|*}" "${cur_cm##*|}" -o json | jq -r '.data | to_entries[] | "\(.key): \(.value)"'
+        __fzfkubectl_execute kubectl get configmap -n "${cur_cm%%|*}" "${cur_cm##*|}" -o json | jq -r '.data | to_entries[] | "\(.key): \(.value)"'
     done
 }
 
-_k_sec() {
-    sel_sec=$(kubectl get secrets --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $2}')
-
+_fzfkubectl_sec() {
+    sel_sec=$(__fzfkubectl_select_namespaced secret)
     if [ -z "$sel_sec" ] ; then
-        _print 'no secret selected, exiting'
+        printf 'no secret selected, exiting\n'
         exit 1
     fi
 
     sel_key=$(kubectl get secret -n "${sel_sec%%|*}" "${sel_sec##*|}" -o json | jq -r '.data | to_entries[] | "\(.key)"' | ${FZF_CMD} --header-lines=0)
-
     if [ -z "$sel_key" ] ; then
-        _print 'no key selected, exiting'
+        printf 'no key selected, exiting\n'
         exit 1
     fi
 
     for cur_key in $sel_key ; do
-        kubectl get secret -n "${sel_sec%%|*}" "${sel_sec##*|}" -o json | jq -r ".data.\"${cur_key}\"" | base64 -d
-        _print ''
+        __fzfkubectl_execute kubectl get secret -n "${sel_sec%%|*}" "${sel_sec##*|}" -o json | jq -r ".data.\"${cur_key}\"" | base64 -d
+        printf '\n'
     done
 }
 
-_k_run() {
+_fzfkubectl_run() {
     image="$1"
+    shift
 
     sel_node=$(kubectl top nodes | ${FZF_CMD} --no-multi | awk '{ print $1 }')
     if [ -z "$sel_node" ] ; then
-        _print 'no node selected, exiting'
+        printf 'no node selected, exiting\n'
         exit 1
     fi
 
     sel_ns=$(kubectl get ns | ${FZF_CMD} --no-multi | awk '{ print $1 }')
     if [ -z "$sel_ns" ] ; then
-        _print 'no namespace selected, exiting'
+        printf 'no namespace selected, exiting\n'
         exit 1
     fi
 
-    _print "enter pod name:"
+    printf "enter pod name:\n"
     IFS= read -r sel_name
     if [ -z "$sel_name" ] ; then
-        _print 'no name entered, exiting'
+        printf 'no name entered, exiting\n'
         exit 1
     fi
 
@@ -409,26 +469,26 @@ _k_run() {
     }
     '
 
-    kubectl run "$sel_name" -n "$sel_ns" --rm -it --image "$image" --overrides="$spec"
+    __fzfkubectl_execute kubectl run "$sel_name" -n "$sel_ns" --rm -it --image "$image" --overrides="$spec"
 }
 
-_k_root() {
+_fzfkubectl_root() {
     sel_node=$(kubectl top nodes | ${FZF_CMD} --no-multi | awk '{ print $1 }')
     if [ -z "$sel_node" ] ; then
-        _print 'no node selected, exiting'
+        printf 'no node selected, exiting\n'
         exit 1
     fi
 
     sel_ns=$(kubectl get ns | ${FZF_CMD} --no-multi | awk '{ print $1 }')
     if [ -z "$sel_ns" ] ; then
-        _print 'no namespace selected, exiting'
+        printf 'no namespace selected, exiting\n'
         exit 1
     fi
 
-    _print "enter pod name:"
+    printf "enter pod name:\n"
     IFS= read -r sel_name
     if [ -z "$sel_name" ] ; then
-        _print 'no name entered, exiting'
+        printf 'no name entered, exiting\n'
         exit 1
     fi
 
@@ -461,99 +521,108 @@ _k_root() {
             ],
             "nodeSelector": {
                 "kubernetes.io/hostname": "'$sel_node'"
-            }
+            },
+            "tolerations": [
+                {
+                    "operator": "Exists"
+                }
+            ]
         }
     }
     '
 
-    kubectl run "$sel_name" -n "$sel_ns" --rm -it --image alpine --overrides="$spec"
+    __fzfkubectl_execute kubectl run "$sel_name" -n "$sel_ns" --rm -it --image alpine --overrides="$spec"
 }
 
-_k_watch() {
+_fzfkubectl_watch() {
     resource="$1"
     shift
-
     if [ -z "$resource" ] ; then
-        _print 'no resources selected, exiting'
+        printf 'no resources selected, exiting\n'
         exit 1
     fi
 
-    if _k_is_namespaced "$resource" ; then
-        sel_res=$(kubectl get "$resource" --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $2 }')
-        if [ -z "$sel_res" ] ; then
-            _print 'no resources selected, exiting'
+    if __fzfkubectl_is_namespaced "$resource" ; then
+        sel_resources=$(__fzfkubectl_select_namespaced "$resource")
+        if [ -z "$sel_resources" ] ; then
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
-        watch -n 2 kubectl get "$resource" -n "${sel_res%%|*}" "${sel_res##*|}" "$@"
+
+        for cur_res in $sel_resources ; do
+            __fzfkubectl_execute watch -n 1 kubectl get "$resource" -n "${cur_res%%|*}" "${cur_res##*|}" "$@"
+        done
     else
-        sel_res=$(kubectl get "$resource" | ${FZF_CMD} | awk -v ORS=' ' '{ print $1 }')
-        if [ -z "$sel_res" ] ; then
-            _print 'no resources selected, exiting'
+        sel_resources=$(__fzfkubectl_select "$resource")
+        if [ -z "$sel_resources" ] ; then
+            printf 'no %s selected, exiting\n' "$resource"
             exit 1
         fi
-        watch -n 2 kubectl get "$resource" "$sel_res" "$@"
+
+        for cur_res in $sel_resources ; do
+            __fzfkubectl_execute watch -n 1 kubectl get "$resource" "${cur_res}" "$@"
+        done
     fi
 }
 
-_k_watch_ns() {
-    sel_ns=$(kubectl get ns | ${FZF_CMD} --no-multi | awk '{ print $1 }')
-
+_fzfkubectl_watch_ns() {
+    sel_ns=$(__fzfkubectl_select namespace)
     if [ -z "$sel_ns" ] ; then
-        _print 'no namespace selected, exiting'
+        printf 'no namespace selected, exiting\n'
         exit 1
     fi
 
-    watch -n 2 kubectl -n "$sel_ns" get all "$@"
+    __fzfkubectl_execute watch -n 1 kubectl -n "$sel_ns" get all "$@"
 }
 
-_k_events() {
+_fzfkubectl_events() {
     sel_event=$(kubectl get events --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $5 }')
-
     if [ -z "$sel_event" ] ; then
-        _print 'no event selected, exiting'
+        printf 'no event selected, exiting\n'
         exit 1
     fi
 
-    kubectl describe -n "${sel_event%%|*}" "${sel_event##*|}"
+    __fzfkubectl_execute kubectl describe -n "${sel_event%%|*}" "${sel_event##*|}"
 }
 
-_k_top_pods() {
+_fzfkubectl_top_pods() {
     sel_pod=$(kubectl top pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $2 }')
-
     if [ -z "$sel_pod" ] ; then
-        _print 'no pod selected, exiting'
+        printf 'no pod selected, exiting\n'
         exit 1
     fi
 
-    kubectl describe pod  -n "${sel_pod%%|*}" "${sel_pod##*|}"
+    __fzfkubectl_execute kubectl describe pod  -n "${sel_pod%%|*}" "${sel_pod##*|}"
 }
 
-_k_top_nodes() {
+_fzfkubectl_top_nodes() {
     sel_node=$(kubectl top nodes | ${FZF_CMD} --no-multi | awk '{ print $1 }')
-
     if [ -z "$sel_node" ] ; then
-        _print 'no node selected, exiting'
+        printf 'no node selected, exiting\n'
         exit 1
     fi
 
-    kubectl describe node "$sel_node"
+    __fzfkubectl_execute kubectl describe node "$sel_node"
 }
 
-_k_context() {
+_fzfkubectl_context() {
     sel_context=$(kubectl config get-contexts -o name | ${FZF_CMD} --no-multi --header-lines=0 )
-
     if [ -z "$sel_context" ] ; then
-        _print 'no context selected, exiting'
+        printf 'no context selected, exiting\n'
         exit 1
     fi
 
-    kubectl config use-context "$sel_context"
+    __fzfkubectl_execute kubectl config use-context "$sel_context"
 }
 
-if [ "$1" = "--verbose" ] || [ "$1" = "-v" ] ; then
-    set -x
-    shift
-fi
+while getopts ":vs" opt ; do
+    case "$opt" in
+        v) VERBOSE=true ;;
+        s) DRY_RUN=true ;;
+        \?) printf 'unknown flag, exiting\n' ; usage ; exit 1 ;;
+    esac
+done
+shift $((OPTIND-1))
 
 if [ "$#" -eq 0 ] ; then
     usage
@@ -562,88 +631,96 @@ fi
 
 action=$1
 shift
-
 case "$action" in
     "get" | "g")
         if [ "$#" -eq 0 ] ; then
-            set -- "$(_k_get_api_resources)"
+            set -- "$(__fzfkubectl_select_api_resource)"
         fi
-        _k_get "$@"
+        _fzfkubectl_get "$@"
     ;;
     "describe" | "d")
         if [ "$#" -eq 0 ] ; then
-            set -- "$(_k_get_api_resources)"
+            set -- "$(__fzfkubectl_select_api_resource)"
         fi
-        _k_describe "$@"
+        _fzfkubectl_describe "$@"
     ;;
     "edit" | "e")
         if [ "$#" -eq 0 ] ; then
-            set -- "$(_k_get_api_resources)"
+            set -- "$(__fzfkubectl_select_api_resource)"
         fi
-        _k_edit "$@"
+        _fzfkubectl_edit "$@"
     ;;
     "run")
-        _k_run "$@"
+        _fzfkubectl_run "$@"
     ;;
     "root" | "rt")
-        _k_root "$@"
+        _fzfkubectl_root "$@"
     ;;
     "delete" | "del")
         if [ "$#" -eq 0 ] ; then
-            set -- "$(_k_get_api_resources)"
+            set -- "$(__fzfkubectl_select_api_resource)"
         fi
-        _k_delete "$@"
+        _fzfkubectl_delete "$@"
     ;;
     "restart")
         if [ "$#" -eq 0 ] ; then
-            set -- "$(_k_get_api_resources)"
+            set -- "$(__fzfkubectl_select_api_resource)"
         fi
-        _k_restart "$@"
+        _fzfkubectl_restart "$@"
+    ;;
+    "scale")
+        if [ "$#" -eq 0 ] ; then
+            set -- "$(__fzfkubectl_select_api_resource)"
+        fi
+        _fzfkubectl_scale "$@"
     ;;
     "logs" | "l")
-        _k_logs "$@"
+        _fzfkubectl_logs "$@"
+    ;;
+    "app-logs" | "al")
+        _fzfkubectl_app_logs "$@"
     ;;
     "fetch")
-        _k_fetch "$@"
+        _fzfkubectl_fetch "$@"
     ;;
     "put")
-        _k_put "$@"
+        _fzfkubectl_put "$@"
     ;;
     "exec" | "ex")
-        _k_exec "$@"
+        _fzfkubectl_exec "$@"
     ;;
     "port-forward" | "pf")
-        _k_port_forward "$@"
+        _fzfkubectl_port_forward "$@"
     ;;
     "configmap" | "cm")
-        _k_configmap
+        _fzfkubectl_configmap
     ;;
     "secret" | "sec")
-        _k_sec
+        _fzfkubectl_sec
     ;;
     "watch" | "w")
         if [ "$#" -eq 0 ] ; then
-            set -- "$(_k_get_api_resources)"
+            set -- "$(__fzfkubectl_select_api_resource)"
         fi
-        _k_watch "$@"
+        _fzfkubectl_watch "$@"
     ;;
     "watchns" | "wn")
-        _k_watch_ns "$@"
+        _fzfkubectl_watch_ns "$@"
     ;;
     "events" | "ev")
-        _k_events
+        _fzfkubectl_events
     ;;
     "top-pods" | "tp")
-        _k_top_pods
+        _fzfkubectl_top_pods
     ;;
     "top-nodes" | "tn")
-        _k_top_nodes
+        _fzfkubectl_top_nodes
     ;;
     "context" | "ctx")
-        _k_context
+        _fzfkubectl_context
     ;;
     *)
-        _print 'unknown action, exiting'
+        printf 'unknown action, exiting\n'
         usage
         exit 1
     ;;

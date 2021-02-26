@@ -182,7 +182,7 @@ _fzfkubectl_describe() {
         fi
 
         for cur_res in $sel_resources ; do
-            __fzfkubectl_execute kubectl get "$resource" "${cur_res}" "$@"
+            __fzfkubectl_execute kubectl describe "$resource" "${cur_res}" "$@"
         done
     fi
 }

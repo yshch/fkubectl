@@ -75,8 +75,8 @@ Usage: fzf-kubectl <command> [options]
     ctx,context     Switch context
 
   Available options:
-    -s                  Simulate/dry-run
-    -v                  Verbose
+    -s  simulate/dry-run
+    -v  verbose
 
 EOF
 }
@@ -306,7 +306,7 @@ _fzfkubectl_logs() {
 }
 
 _fzfkubectl_app_logs() {
-    sel_app=$(kubectl get daemonset,deployment,statefulset --all-namespaces --no-headers | ${FZF_CMD} --header-lines=0 | awk '{ print $1 "|" $2 }')
+    sel_app=$(kubectl get deployment,statefulset,daemonset --all-namespaces --no-headers | ${FZF_CMD} --header-lines=0 | awk '{ print $1 "|" $2 }')
     if [ -z "$sel_app" ] ; then
         printf 'no app selected, exiting\n'
         exit 1

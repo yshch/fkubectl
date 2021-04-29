@@ -118,7 +118,11 @@ __fzfkubectl_select_namespaced() {
         exit 1
     fi
 
-    kubectl get "$resource" --all-namespaces | ${FZF_CMD} | awk '{ print $1 "|" $2 }'
+    sel_namespace=$(__fzfkubectl_select "namespace")
+    if [ -z "$sel_namespace" ] ; then
+        exit 1
+    fi
+    kubectl get "$resource" -n "$sel_namespace" | ${FZF_CMD} | awk -v "namespace=$sel_namespace" '{ print namespace "|" $1 }'
 }
 
 __fzfkubectl_select_api_resource() {

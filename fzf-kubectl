@@ -114,7 +114,7 @@ __fzfkubectl_select() {
         exit 1
     fi
 
-    kubectl get "$resource" | ${FZF_CMD} | awk '{ print $1 }'
+    kubectl get "$resource" | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get $resource)" | awk '{ print $1 }'
 }
 
 __fzfkubectl_select_namespaced() {
@@ -127,11 +127,11 @@ __fzfkubectl_select_namespaced() {
     if [ -z "$sel_namespace" ] ; then
         exit 1
     fi
-    kubectl get "$resource" -n "$sel_namespace" | ${FZF_CMD} | awk -v "namespace=$sel_namespace" '{ print namespace "|" $1 }'
+    kubectl get "$resource" -n "$sel_namespace" | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get $resource -n $sel_namespace)" | awk -v "namespace=$sel_namespace" '{ print namespace "|" $1 }'
 }
 
 __fzfkubectl_select_api_resource() {
-    kubectl api-resources | ${FZF_CMD} --no-multi | awk '{ print $1 }'
+    kubectl api-resources | ${FZF_CMD} --bind "ctrl-r:reload(kubectl api-resources)" --no-multi | awk '{ print $1 }'
 }
 
 _fzfkubectl_get() {
@@ -303,7 +303,7 @@ _fzfkubectl_logs() {
         exit 1
     fi
 
-    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --header-lines=0)
+    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get pods -n ${sel_pod%%|*} ${sel_pod##*|} -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n')" -1 --header-lines=0)
     if [ -z "$sel_cont" ] ; then
         printf 'no container selected, exiting\n'
         exit 1
@@ -315,7 +315,7 @@ _fzfkubectl_logs() {
 }
 
 _fzfkubectl_app_logs() {
-    sel_app=$(kubectl get deployment,statefulset,daemonset --all-namespaces --no-headers | ${FZF_CMD} --header-lines=0 | awk '{ print $1 "|" $2 }')
+    sel_app=$(kubectl get deployment,statefulset,daemonset --all-namespaces --no-headers | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get deployment,statefulset,daemonset --all-namespaces --no-headers)" --header-lines=0 | awk '{ print $1 "|" $2 }')
     if [ -z "$sel_app" ] ; then
         printf 'no app selected, exiting\n'
         exit 1
@@ -339,7 +339,7 @@ _fzfkubectl_fetch() {
         exit 1
     fi
 
-    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --no-multi --header-lines=0)
+    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get pods -n ${sel_pod%%|*} ${sel_pod##*|} -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n')" -1 --no-multi --header-lines=0)
     if [ -z "$sel_cont" ] ; then
         printf 'no container selected, exiting\n'
         exit 1
@@ -360,7 +360,7 @@ _fzfkubectl_put() {
         exit 1
     fi
 
-    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --no-multi --header-lines=0)
+    sel_cont=$(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n' | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get pods -n "${sel_pod%%|*}" "${sel_pod##*|}" -o=jsonpath='{.spec.containers[*].name}' | tr -s '[:space:]' '\n')" -1 --no-multi --header-lines=0)
     if [ -z "$sel_cont" ] ; then
         printf 'no container selected, exiting\n'
         exit 1
@@ -381,7 +381,7 @@ _fzfkubectl_exec() {
         exit 1
     fi
 
-    sel_cont=$(kubectl get pods -o=jsonpath='{.spec.containers[*].name}' -n "${sel_pod%%|*}" "${sel_pod##*|}" | tr -s '[:space:]' '\n' | ${FZF_CMD} -1 --header-lines=0)
+    sel_cont=$(kubectl get pods -o=jsonpath='{.spec.containers[*].name}' -n "${sel_pod%%|*}" "${sel_pod##*|}" | tr -s '[:space:]' '\n' | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get pods -o=jsonpath='{.spec.containers[*].name}' -n "${sel_pod%%|*}" "${sel_pod##*|}" | tr -s '[:space:]' '\n')" -1 --header-lines=0)
     if [ -z "$sel_cont" ] ; then
         printf 'no container selected, exiting\n'
         exit 1
@@ -428,7 +428,7 @@ _fzfkubectl_sec() {
         exit 1
     fi
 
-    sel_key=$(kubectl get secret -n "${sel_sec%%|*}" "${sel_sec##*|}" -o json | jq -r '.data | to_entries[] | "\(.key)"' | ${FZF_CMD} --header-lines=0)
+    sel_key=$(kubectl get secret -n "${sel_sec%%|*}" "${sel_sec##*|}" -o json | jq -r '.data | to_entries[] | "\(.key)"' | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get secret -n ${sel_sec%%|*} ${sel_sec##*|} -o json | jq -r '.data | to_entries[] | \(.key)')" --header-lines=0)
     if [ -z "$sel_key" ] ; then
         printf 'no key selected, exiting\n'
         exit 1
@@ -444,13 +444,13 @@ _fzfkubectl_run() {
     image="$1"
     shift
 
-    sel_node=$(kubectl top nodes | ${FZF_CMD} --no-multi | awk '{ print $1 }')
+    sel_node=$(kubectl top nodes | ${FZF_CMD} --bind "ctrl-r:reload(kubectl top nodes)" --no-multi | awk '{ print $1 }')
     if [ -z "$sel_node" ] ; then
         printf 'no node selected, exiting\n'
         exit 1
     fi
 
-    sel_ns=$(kubectl get ns | ${FZF_CMD} --no-multi | awk '{ print $1 }')
+    sel_ns=$(kubectl get ns | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get ns)" --no-multi | awk '{ print $1 }')
     if [ -z "$sel_ns" ] ; then
         printf 'no namespace selected, exiting\n'
         exit 1
@@ -482,13 +482,13 @@ _fzfkubectl_run() {
 }
 
 _fzfkubectl_root() {
-    sel_node=$(kubectl top nodes | ${FZF_CMD} --no-multi | awk '{ print $1 }')
+    sel_node=$(kubectl top nodes | ${FZF_CMD} --bind "ctrl-r:reload(kubectl top nodes)" --no-multi | awk '{ print $1 }')
     if [ -z "$sel_node" ] ; then
         printf 'no node selected, exiting\n'
         exit 1
     fi
 
-    sel_ns=$(kubectl get ns | ${FZF_CMD} --no-multi | awk '{ print $1 }')
+    sel_ns=$(kubectl get ns | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get ns)" --no-multi | awk '{ print $1 }')
     if [ -z "$sel_ns" ] ; then
         printf 'no namespace selected, exiting\n'
         exit 1
@@ -585,7 +585,7 @@ _fzfkubectl_watch_ns() {
 }
 
 _fzfkubectl_events() {
-    sel_event=$(kubectl get events --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $5 }')
+    sel_event=$(kubectl get events --all-namespaces | ${FZF_CMD} --bind "ctrl-r:reload(kubectl get events --all-namespaces)" --no-multi | awk '{ print $1 "|" $5 }')
     if [ -z "$sel_event" ] ; then
         printf 'no event selected, exiting\n'
         exit 1
@@ -595,7 +595,7 @@ _fzfkubectl_events() {
 }
 
 _fzfkubectl_top_pods() {
-    sel_pod=$(kubectl top pods --all-namespaces | ${FZF_CMD} --no-multi | awk '{ print $1 "|" $2 }')
+    sel_pod=$(kubectl top pods --all-namespaces | ${FZF_CMD} --bind "ctrl-r:reload(kubectl top pods --all-namespaces)" --no-multi | awk '{ print $1 "|" $2 }')
     if [ -z "$sel_pod" ] ; then
         printf 'no pod selected, exiting\n'
         exit 1
@@ -605,7 +605,7 @@ _fzfkubectl_top_pods() {
 }
 
 _fzfkubectl_top_nodes() {
-    sel_node=$(kubectl top nodes | ${FZF_CMD} --no-multi | awk '{ print $1 }')
+    sel_node=$(kubectl top nodes | ${FZF_CMD} --bind "ctrl-r:reload(kubectl top nodes)" --no-multi | awk '{ print $1 }')
     if [ -z "$sel_node" ] ; then
         printf 'no node selected, exiting\n'
         exit 1
@@ -615,7 +615,7 @@ _fzfkubectl_top_nodes() {
 }
 
 _fzfkubectl_context() {
-    sel_context=$(kubectl config get-contexts -o name | ${FZF_CMD} --no-multi --header-lines=0 )
+    sel_context=$(kubectl config get-contexts -o name | ${FZF_CMD} --bind "ctrl-r:reload(kubectl config get-contexts -o name)" --no-multi --header-lines=0 )
     if [ -z "$sel_context" ] ; then
         printf 'no context selected, exiting\n'
         exit 1

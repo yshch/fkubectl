@@ -75,6 +75,7 @@ Usage: fzf-kubectl <command> [options]
     ctx,context     Switch context
 
   Available options:
+    -c  pipe final command to xclip
     -s  simulate/dry-run
     -v  verbose
 
@@ -83,6 +84,10 @@ EOF
 
 __fzfkubectl_execute() {
     cmd="$@"
+
+    if [ "$CLIPBOARD" = "true" ] ; then
+        printf "$*" | xclip
+    fi
 
     if [ "$VERBOSE" = "true" ] ; then
         printf "$*\n"
@@ -619,8 +624,9 @@ _fzfkubectl_context() {
     __fzfkubectl_execute kubectl config use-context "$sel_context"
 }
 
-while getopts ":vs" opt ; do
+while getopts ":cvs" opt ; do
     case "$opt" in
+        c) CLIPBOARD=true ;;
         v) VERBOSE=true ;;
         s) DRY_RUN=true ;;
         \?) printf 'unknown flag, exiting\n' ; usage ; exit 1 ;;

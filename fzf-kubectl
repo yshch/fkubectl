@@ -85,15 +85,15 @@ EOF
 __fzfkubectl_execute() {
     cmd="$@"
 
-    if [ "$CLIPBOARD" = "true" ] ; then
+    if [ "$FZFKUBECTL_CLIPBOARD" = "true" ] ; then
         printf "$*" | xclip
     fi
 
-    if [ "$VERBOSE" = "true" ] ; then
+    if [ "$FZFKUBECTL_VERBOSE" = "true" ] ; then
         printf "$*\n"
     fi
 
-    if [ "$DRY_RUN" != "true" ] ; then
+    if [ "$FZFKUBECTL_DRYRUN" != "true" ] ; then
         "$@"
     fi
 }
@@ -626,9 +626,9 @@ _fzfkubectl_context() {
 
 while getopts ":cvs" opt ; do
     case "$opt" in
-        c) CLIPBOARD=true ;;
-        v) VERBOSE=true ;;
-        s) DRY_RUN=true ;;
+        c) FZFKUBECTL_CLIPBOARD=true ;;
+        v) FZFKUBECTL_VERBOSE=true ;;
+        s) FZFKUBECTL_DRYRUN=true ;;
         \?) printf 'unknown flag, exiting\n' ; usage ; exit 1 ;;
     esac
 done
